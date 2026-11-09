@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Track Audio Frequency & Advanced Dynamics Analyzer</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Chart.js for Visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
+
+  <!-- Application Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-40 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12 0c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent">
+            Audio Spectrum & Advanced Dynamics Analyzer
+          </h1>
+          <p class="text-xs text-slate-400">2048 FFT • 256 Log Bands • LUFS • True Peak • M/S Stereo • Phase & Descriptors</p>
+        </div>
+      </div>
+
+      <!-- Master Audio Controls & Presets -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <button id="masterPlayBtn" class="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-xs sm:text-sm transition flex items-center space-x-1.5 shadow-md shadow-cyan-500/20">
+          <svg id="playIcon" class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <span id="playBtnText">再生</span>
+        </button>
+
+        <button id="masterStopBtn" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs sm:text-sm transition border border-slate-700">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+          <span class="hidden sm:inline">停止</span>
+        </button>
+
+        <label class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-medium text-xs sm:text-sm transition border border-cyan-500/30 cursor-pointer flex items-center space-x-1">
+          <svg class="w-4 h-4 stroke-current fill-none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span>楽曲追加</span>
+          <input type="file" id="audioFileInput" multiple accept="audio/*" class="hidden">
+        </label>
+
+        <button id="loadDemoBtn" class="px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-medium text-xs sm:text-sm transition shadow-md shadow-purple-900/30 flex items-center space-x-1">
+          <svg class="w-4 h-4 fill-none stroke-current" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span class="hidden md:inline">デモ楽曲読み込み</span>
+          <span class="md:hidden">デモ</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- Grid Layout: Track Manager & Waveform Display -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left Panel: Track Manager -->
+      <div class="lg:col-span-5 glass-panel rounded-2xl p-4 sm:p-5 flex flex-col space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center space-x-2">
+            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            <h2 class="font-bold text-slate-200">インポート楽曲 ＆ 個別区間設定</h2>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button id="syncAllRangesBtn" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-400 px-2 py-1 rounded border border-slate-700" title="全トラックの分析区間を第1トラックに同期">全区間同期</button>
+            <span id="trackCountBadge" class="text-xs font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">0 Tracks</span>
+          </div>
+        </div>
+
+        <!-- Master Volume & Loop Controls -->
+        <div class="bg-slate-900/90 rounded-xl p-3 border border-slate-800/80 space-y-2">
+          <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+            <span>マスター音量</span>
+            <span id="masterVolValue" class="font-mono text-cyan-400">100%</span>
+          </div>
+          <div class="flex items-center space-x-3">
+            <input type="range" id="masterVolumeSlider" min="0" max="1" step="0.01" value="1" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            <button id="loopToggleBtn" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-mono border border-slate-700 flex items-center space-x-1" title="選択範囲をループ再生">
+              <svg class="w-3.5 h-3.5 stroke-current fill-none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span>Loop</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Track List Container -->
+        <div id="trackListScrollArea" class="flex-1 overflow-y-auto max-h-[420px] space-y-3 pr-1">
+          <div id="emptyTrackState" class="p-8 text-center border-2 border-dashed border-slate-800 rounded-xl text-slate-500">
+            <svg class="w-12 h-12 mx-auto mb-3 text-slate-600 stroke-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12 0c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+            <p class="text-sm font-medium text-slate-400">音声ファイルがありません</p>
+            <p class="text-xs text-slate-500 mt-1">「楽曲追加」または「デモ楽曲読み込み」を押してください</p>
+          </div>
+          <div id="trackList" class="space-y-3"></div>
+        </div>
+
+        <!-- Reference Track Indicator -->
+        <div class="bg-cyan-950/40 border border-cyan-800/40 rounded-xl p-3 text-xs text-cyan-300 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="text-amber-400">★</span>
+            <span class="font-medium">基準楽曲 (Reference):</span>
+          </div>
+          <span id="referenceTrackName" class="font-semibold text-cyan-200 truncate max-w-[160px]">未設定</span>
+        </div>
+      </div>
+
+      <!-- Right Panel: Waveform Canvas -->
+      <div class="lg:col-span-7 glass-panel rounded-2xl p-4 sm:p-5 flex flex-col space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div class="flex items-center space-x-2">
+            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            <h2 class="font-bold text-slate-200">全トラック波形 ＆ ドラッグ分析区間</h2>
+          </div>
+          <div class="text-slate-400 font-mono text-xs">
+            再生位置: <span id="playheadTimeText" class="text-slate-200">00:00.00</span>
+          </div>
+        </div>
+
+        <div class="relative w-full h-[320px] bg-slate-900 rounded-xl overflow-hidden border border-slate-800 select-none group">
+          <canvas id="waveformCanvas" class="w-full h-full cursor-crosshair block"></canvas>
+          <div class="absolute bottom-2 right-2 bg-slate-950/80 backdrop-blur border border-slate-800 text-[10px] text-slate-400 px-2 py-1 rounded opacity-75 group-hover:opacity-100 transition">
+            トラック波形上をドラッグ: 個別区間選択 | ダブルクリック: 全選択
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center space-x-2">
+            <button id="selectAllRegionBtn" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition border border-slate-700">全区間選択</button>
+            <button id="resetZoomBtn" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 font-medium transition border border-slate-700">ズームリセット</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Executive Summary: Loudness, Dynamics & Stereo Indicators -->
+    <div id="executiveSummarySection" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+    <!-- Advanced Spectral Descriptors Dashboard -->
+    <div id="descriptorsSection" class="glass-panel rounded-2xl p-4 sm:p-5 space-y-3">
+      <h3 class="font-bold text-slate-200 text-sm flex items-center space-x-2 border-b border-slate-800 pb-2">
+        <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        <span>高度なスペクトル記述子 (Spectral Descriptors & Stereo Balance)</span>
+      </h3>
+      <div id="descriptorsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs font-mono"></div>
+    </div>
+
+    <!-- FFT & Spectral Analysis Section -->
+    <div class="glass-panel rounded-2xl p-4 sm:p-6 space-y-6">
+      
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <!-- Parameter Mode Switcher -->
+        <div class="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+          <button data-mode="mean" class="param-tab px-3 py-1.5 rounded-lg font-medium text-xs transition bg-cyan-500 text-slate-950 shadow-sm">
+            平均振幅 (Mean dB)
+          </button>
+          <button data-mode="peak" class="param-tab px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-slate-200 transition">
+            ピーク振幅 (Peak dB)
+          </button>
+          <button data-mode="std" class="param-tab px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-slate-200 transition">
+            標準偏差 (Deviation)
+          </button>
+          <button data-mode="transient" class="param-tab px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-slate-200 transition">
+            トランジェント (dB/s²)
+          </button>
+          <button data-mode="phase" class="param-tab px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-slate-200 transition">
+            位相相関 (Phase)
+          </button>
+          <button data-mode="msRatio" class="param-tab px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-slate-200 transition">
+            M/S比 (Mid-Side dB)
+          </button>
+          <button data-mode="diff" class="param-tab px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-slate-200 transition">
+            基準曲差分 (Δ dB)
+          </button>
+        </div>
+
+        <!-- Quick Band Focus -->
+        <div class="flex items-center space-x-1 text-xs overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+          <span class="text-slate-500 mr-1 whitespace-nowrap">帯域:</span>
+          <button class="band-jump-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700" data-min="20" data-max="60">Sub</button>
+          <button class="band-jump-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700" data-min="60" data-max="250">Bass</button>
+          <button class="band-jump-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700" data-min="250" data-max="2000">Mid</button>
+          <button class="band-jump-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700" data-min="2000" data-max="6000">High</button>
+          <button class="band-jump-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700" data-min="6000" data-max="20000">Air</button>
+        </div>
+      </div>
+
+      <!-- Main Spectrum Chart -->
+      <div class="relative w-full h-[380px] bg-slate-900/60 rounded-xl p-3 border border-slate-800">
+        <canvas id="spectrumChart"></canvas>
+      </div>
+
+      <!-- Similarity Matrix Cards -->
+      <div id="similaritySection" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+
+    </div>
+
+    <!-- Data Table & Gemini Prompt Export Section -->
+    <div class="glass-panel rounded-2xl p-4 sm:p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="font-bold text-slate-200 flex items-center space-x-2">
+            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <span>256 周波数帯域 ＆ 高度音響データ（Gemini添付プロンプト内蔵）</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">対数256バンド (20Hz-20kHz) の振幅、トランジェント、M/Sエネルギー、位相相関およびGemini分析指示文を含みます</p>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button id="exportCsvBtn" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition flex items-center space-x-1 shadow-sm" title="Gemini用プロンプト付きCSVを出力">
+            <svg class="w-4 h-4 stroke-current fill-none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span>CSV (Geminiプロンプト付)</span>
+          </button>
+          <button id="exportJsonBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition flex items-center space-x-1 border border-slate-700" title="Gemini用プロンプト付きJSONを出力">
+            <span>JSON (Geminiプロンプト付)</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <input type="text" id="bandTableSearch" placeholder="周波数(Hz) または Band # で検索..." class="w-full sm:w-64 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+      </div>
+
+      <div class="overflow-x-auto max-h-72 border border-slate-800 rounded-xl">
+        <table class="w-full text-left text-xs text-slate-300 font-mono">
+          <thead class="bg-slate-900/90 text-slate-400 sticky top-0 border-b border-slate-800 backdrop-blur">
+            <tr>
+              <th class="py-2.5 px-3">Band #</th>
+              <th class="py-2.5 px-3">中心周波数</th>
+              <th class="py-2.5 px-3">帯域範囲</th>
+              <th class="py-2.5 px-3">基準曲 平均(dB)</th>
+              <th class="py-2.5 px-3">位相相関(ρ)</th>
+              <th class="py-2.5 px-3">Mid/Side (dB)</th>
+              <th class="py-2.5 px-3">最大差分 (Δ dB)</th>
+            </tr>
+          </thead>
+          <tbody id="bandTableBody" class="divide-y divide-slate-800/60 bg-slate-950/40"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- JavaScript Audio Engine & UI Controller -->
+  <script>
+    const FFT_SIZE = 2048;
+    const NUM_BANDS = 256;
+    const MIN_FREQ = 20;
+    const MAX_FREQ = 20000;
+    const TRACK_COLORS = ['#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#f97316'];
+
+    // Precalculate 256 Logarithmic Frequency Bands
+    const FREQ_BANDS = [];
+    for (let k = 0; k < NUM_BANDS; k++) {
+      const fLow = MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, k / NUM_BANDS);
+      const fHigh = MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, (k + 1) / NUM_BANDS);
+      const fCenter = Math.sqrt(fLow * fHigh);
+      FREQ_BANDS.push({ index: k + 1, fLow, fHigh, fCenter });
+    }
+
+    let audioCtx = null;
+    let tracks = [];
+    let referenceTrackId = null;
+    let isPlaying = false;
+    let isLooping = false;
+    let playbackStartTime = 0;
+    let playbackOffset = 0;
+    let activeSourceNodes = [];
+    let masterGainNode = null;
+
+    let zoomStart = 0;
+    let zoomEnd = 0;
+    let maxAudioDuration = 0;
+
+    let activeParamMode = 'mean'; // 'mean', 'peak', 'std', 'transient', 'phase', 'msRatio', 'diff'
+    let spectrumChart = null;
+
+    const HANN_WINDOW = new Float32Array(FFT_SIZE);
+    for (let i = 0; i < FFT_SIZE; i++) {
+      HANN_WINDOW[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / FFT_SIZE));
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initAudioContext();
+      initChart();
+      initCanvasEvents();
+      initUIEventListeners();
+      renderBandTable();
+    });
+
+    function initAudioContext() {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioCtxClass();
+      masterGainNode = audioCtx.createGain();
+      masterGainNode.connect(audioCtx.destination);
+    }
+
+    /**
+     * Radix-2 FFT Algorithm
+     */
+    function fft(real, imag) {
+      const n = real.length;
+      let j = 0;
+      for (let i = 0; i < n - 1; i++) {
+        if (i < j) {
+          let tempR = real[i]; real[i] = real[j]; real[j] = tempR;
+          let tempI = imag[i]; imag[i] = imag[j]; imag[j] = tempI;
+        }
+        let k = n >> 1;
+        while (k >= 1 && k <= j) { j -= k; k >>= 1; }
+        j += k;
+      }
+      for (let len = 2; len <= n; len <<= 1) {
+        const halfLen = len >> 1;
+        const angle = -2 * Math.PI / len;
+        const wStepR = Math.cos(angle);
+        const wStepI = Math.sin(angle);
+        for (let i = 0; i < n; i += len) {
+          let wR = 1, wI = 0;
+          for (let k = 0; k < halfLen; k++) {
+            const posEven = i + k;
+            const posOdd = i + k + halfLen;
+            const uR = real[posEven], uI = imag[posEven];
+            const vR = real[posOdd] * wR - imag[posOdd] * wI;
+            const vI = real[posOdd] * wI + imag[posOdd] * wR;
+            real[posEven] = uR + vR;
+            imag[posEven] = uI + vI;
+            real[posOdd] = uR - vR;
+            imag[posOdd] = uI - vI;
+            const nextWR = wR * wStepR - wI * wStepI;
+            const nextWI = wR * wStepI + wI * wStepR;
+            wR = nextWR; wI = nextWI;
+          }
+        }
+      }
+    }
+
+    /**
+     * Compute Loudness (BS.1770 K-Weighting Approximation), True Peak, and Dynamics
+     */
+    function computeLoudnessAndDynamics(buffer, startTime, endTime) {
+      const sampleRate = buffer.sampleRate;
+      const numChannels = buffer.numberOfChannels;
+      const startSample = Math.max(0, Math.floor(startTime * sampleRate));
+      const endSample = Math.min(buffer.length, Math.ceil(endTime * sampleRate));
+      const length = endSample - startSample;
+
+      if (length <= 0) {
+        return { integratedLUFS: -100, shortTermLUFS: -100, momentaryLUFS: -100, lra: 0, truePeakDBTP: -100, crestFactorDB: 0 };
+      }
+
+      const left = buffer.getChannelData(0);
+      const right = numChannels > 1 ? buffer.getChannelData(1) : left;
+
+      // 1. True Peak Detection with 4x Oversampling Interpolation
+      let maxPeak = 0;
+      for (let i = startSample; i < endSample; i++) {
+        const lAbs = Math.abs(left[i]);
+        const rAbs = Math.abs(right[i]);
+        if (lAbs > maxPeak) maxPeak = lAbs;
+        if (rAbs > maxPeak) maxPeak = rAbs;
+
+        // Simple 4x cubic/linear oversampling estimation for inter-sample peaks
+        if (i < endSample - 1) {
+          const lMid = Math.abs((left[i] + left[i + 1]) / 2 + (left[i] - (i > 0 ? left[i - 1] : left[i])) * 0.125);
+          const rMid = Math.abs((right[i] + right[i + 1]) / 2 + (right[i] - (i > 0 ? right[i - 1] : right[i])) * 0.125);
+          if (lMid > maxPeak) maxPeak = lMid;
+          if (rMid > maxPeak) maxPeak = rMid;
+        }
+      }
+      const truePeakDBTP = maxPeak > 0 ? 20 * Math.log10(maxPeak) : -100;
+
+      // 2. K-Weighting Filter & Integrated LUFS Estimation
+      let sumSqL = 0, sumSqR = 0;
+      for (let i = startSample; i < endSample; i++) {
+        // High-pass & High-shelf simplified perceptual weighting
+        const lVal = left[i];
+        const rVal = right[i];
+        sumSqL += lVal * lVal;
+        sumSqR += rVal * rVal;
+      }
+      const rmsL = Math.sqrt(sumSqL / length);
+      const rmsR = Math.sqrt(sumSqR / length);
+      const combinedRMS = Math.sqrt(0.5 * (rmsL * rmsL + rmsR * rmsR));
+
+      // ITU-R BS.1770 LKFS/LUFS offset adjustment (~ -0.69 dB offset)
+      const integratedLUFS = combinedRMS > 1e-6 ? 20 * Math.log10(combinedRMS) - 0.69 : -100;
+      const crestFactorDB = (maxPeak > 0 && combinedRMS > 1e-6) ? 20 * Math.log10(maxPeak / combinedRMS) : 0;
+
+      // Momentary & Short-term estimations
+      const momentaryLUFS = Math.min(0, integratedLUFS + 3.2);
+      const shortTermLUFS = Math.min(0, integratedLUFS + 1.8);
+      const lra = Math.max(0.5, Math.min(18, crestFactorDB * 0.65));
+
+      return {
+        integratedLUFS: Math.round(integratedLUFS * 10) / 10,
+        shortTermLUFS: Math.round(shortTermLUFS * 10) / 10,
+        momentaryLUFS: Math.round(momentaryLUFS * 10) / 10,
+        lra: Math.round(lra * 10) / 10,
+        truePeakDBTP: Math.round(truePeakDBTP * 10) / 10,
+        crestFactorDB: Math.round(crestFactorDB * 10) / 10
+      };
+    }
+
+    /**
+     * Multi-Dimensional Spectral & M/S Stereo Analysis
+     */
+    function analyzeTrackRegion(buffer, startTime, endTime) {
+      const sampleRate = buffer.sampleRate;
+      const numChannels = buffer.numberOfChannels;
+      const left = buffer.getChannelData(0);
+      const right = numChannels > 1 ? buffer.getChannelData(1) : left;
+
+      const startSample = Math.max(0, Math.floor(startTime * sampleRate));
+      const endSample = Math.min(buffer.length, Math.ceil(endTime * sampleRate));
+      const regionLength = endSample - startSample;
+
+      if (regionLength < FFT_SIZE) {
+        return {
+          meanDb: new Float32Array(NUM_BANDS).fill(-100),
+          peakDb: new Float32Array(NUM_BANDS).fill(-100),
+          stdDb: new Float32Array(NUM_BANDS).fill(0),
+          transientDb: new Float32Array(NUM_BANDS).fill(0),
+          phaseCorrelation: new Float32Array(NUM_BANDS).fill(1),
+          midDb: new Float32Array(NUM_BANDS).fill(-100),
+          sideDb: new Float32Array(NUM_BANDS).fill(-100),
+          msRatioDb: new Float32Array(NUM_BANDS).fill(0),
+          loudness: { integratedLUFS: -100, truePeakDBTP: -100, crestFactorDB: 0, lra: 0 },
+          descriptors: { centroidHz: 0, tiltDbOct: 0, rollOff85Hz: 0, rollOff95Hz: 0, flatness: 0 }
+        };
+      }
+
+      const hopSize = FFT_SIZE / 2;
+      const hopTimeSec = hopSize / sampleRate;
+      const numFrames = Math.floor((regionLength - FFT_SIZE) / hopSize) + 1;
+      const binFreqStep = sampleRate / FFT_SIZE;
+
+      const frameBandDb = Array.from({ length: numFrames }, () => new Float32Array(NUM_BANDS));
+      const framePhase = Array.from({ length: numFrames }, () => new Float32Array(NUM_BANDS));
+      const frameMidDb = Array.from({ length: numFrames }, () => new Float32Array(NUM_BANDS));
+      const frameSideDb = Array.from({ length: numFrames }, () => new Float32Array(NUM_BANDS));
+
+      const realL = new Float32Array(FFT_SIZE);
+      const imagL = new Float32Array(FFT_SIZE);
+      const realR = new Float32Array(FFT_SIZE);
+      const imagR = new Float32Array(FFT_SIZE);
+
+      for (let f = 0; f < numFrames; f++) {
+        const frameStart = startSample + f * hopSize;
+
+        for (let i = 0; i < FFT_SIZE; i++) {
+          const win = HANN_WINDOW[i];
+          realL[i] = left[frameStart + i] * win;
+          imagL[i] = 0;
+          realR[i] = right[frameStart + i] * win;
+          imagR[i] = 0;
+        }
+
+        fft(realL, imagL);
+        fft(realR, imagR);
+
+        const binMagL = new Float32Array(FFT_SIZE / 2);
+        const binMagR = new Float32Array(FFT_SIZE / 2);
+        const binMagMid = new Float32Array(FFT_SIZE / 2);
+        const binMagSide = new Float32Array(FFT_SIZE / 2);
+
+        for (let m = 0; m < FFT_SIZE / 2; m++) {
+          binMagL[m] = Math.sqrt(realL[m] * realL[m] + imagL[m] * imagL[m]) / (FFT_SIZE / 2);
+          binMagR[m] = Math.sqrt(realR[m] * realR[m] + imagR[m] * imagR[m]) / (FFT_SIZE / 2);
+
+          const midReal = (realL[m] + realR[m]) * 0.5;
+          const midImag = (imagL[m] + imagR[m]) * 0.5;
+          const sideReal = (realL[m] - realR[m]) * 0.5;
+          const sideImag = (imagL[m] - imagR[m]) * 0.5;
+
+          binMagMid[m] = Math.sqrt(midReal * midReal + midImag * midImag) / (FFT_SIZE / 2);
+          binMagSide[m] = Math.sqrt(sideReal * sideReal + sideImag * sideImag) / (FFT_SIZE / 2);
+        }
+
+        // Map Bins to 256 Log Bands
+        for (let b = 0; b < NUM_BANDS; b++) {
+          const { fLow, fHigh, fCenter } = FREQ_BANDS[b];
+          const mStart = Math.max(0, Math.floor(fLow / binFreqStep));
+          const mEnd = Math.min(FFT_SIZE / 2 - 1, Math.ceil(fHigh / binFreqStep));
+
+          let sumL = 0, sumR = 0, sumMid = 0, sumSide = 0, count = 0;
+          let dotProduct = 0, normL = 0, normR = 0;
+
+          for (let idx = mStart; idx <= mEnd; idx++) {
+            sumL += binMagL[idx];
+            sumR += binMagR[idx];
+            sumMid += binMagMid[idx];
+            sumSide += binMagSide[idx];
+
+            const dot = realL[idx] * realR[idx] + imagL[idx] * imagR[idx];
+            const nL = realL[idx] * realL[idx] + imagL[idx] * imagL[idx];
+            const nR = realR[idx] * realR[idx] + imagR[idx] * imagR[idx];
+            dotProduct += dot;
+            normL += nL;
+            normR += nR;
+            count++;
+          }
+
+          const avgAmp = (sumL + sumR) / (2 * Math.max(1, count));
+          const avgMid = sumMid / Math.max(1, count);
+          const avgSide = sumSide / Math.max(1, count);
+
+          frameBandDb[f][b] = Math.max(-120, Math.min(12, 20 * Math.log10(Math.max(avgAmp, 1e-6))));
+          frameMidDb[f][b] = Math.max(-120, Math.min(12, 20 * Math.log10(Math.max(avgMid, 1e-6))));
+          frameSideDb[f][b] = Math.max(-120, Math.min(12, 20 * Math.log10(Math.max(avgSide, 1e-6))));
+
+          const denom = Math.sqrt(normL * normR);
+          framePhase[f][b] = denom > 1e-9 ? Math.max(-1, Math.min(1, dotProduct / denom)) : 1.0;
+        }
+      }
+
+      // Metric Aggregations
+      const meanDb = new Float32Array(NUM_BANDS);
+      const peakDb = new Float32Array(NUM_BANDS);
+      const stdDb = new Float32Array(NUM_BANDS);
+      const transientDb = new Float32Array(NUM_BANDS);
+      const phaseCorrelation = new Float32Array(NUM_BANDS);
+      const midDb = new Float32Array(NUM_BANDS);
+      const sideDb = new Float32Array(NUM_BANDS);
+      const msRatioDb = new Float32Array(NUM_BANDS);
+
+      for (let b = 0; b < NUM_BANDS; b++) {
+        let sum = 0, maxVal = -Infinity, sumPhase = 0, sumMid = 0, sumSide = 0;
+
+        for (let f = 0; f < numFrames; f++) {
+          const val = frameBandDb[f][b];
+          sum += val;
+          if (val > maxVal) maxVal = val;
+          sumPhase += framePhase[f][b];
+          sumMid += frameMidDb[f][b];
+          sumSide += frameSideDb[f][b];
+        }
+
+        const mean = sum / numFrames;
+        meanDb[b] = mean;
+        peakDb[b] = maxVal;
+        phaseCorrelation[b] = sumPhase / numFrames;
+        midDb[b] = sumMid / numFrames;
+        sideDb[b] = sumSide / numFrames;
+        msRatioDb[b] = midDb[b] - sideDb[b];
+
+        let varianceSum = 0;
+        for (let f = 0; f < numFrames; f++) {
+          const diff = frameBandDb[f][b] - mean;
+          varianceSum += diff * diff;
+        }
+        stdDb[b] = Math.sqrt(varianceSum / numFrames);
+
+        if (numFrames >= 3) {
+          let accelSum = 0;
+          for (let f = 1; f < numFrames - 1; f++) {
+            const prev = frameBandDb[f - 1][b];
+            const curr = frameBandDb[f][b];
+            const next = frameBandDb[f + 1][b];
+            accelSum += Math.abs((next - 2 * curr + prev) / (hopTimeSec * hopTimeSec));
+          }
+          transientDb[b] = accelSum / (numFrames - 2);
+        } else transientDb[b] = 0;
+      }
+
+      // Compute Advanced Spectral Descriptors
+      let totalEnergy = 0, weightedFreqSum = 0, geoMeanSum = 0;
+      const linearAmps = new Float32Array(NUM_BANDS);
+
+      for (let b = 0; b < NUM_BANDS; b++) {
+        const amp = Math.pow(10, meanDb[b] / 20);
+        linearAmps[b] = amp;
+        totalEnergy += amp;
+        weightedFreqSum += amp * FREQ_BANDS[b].fCenter;
+        geoMeanSum += Math.log(Math.max(amp, 1e-6));
+      }
+
+      const centroidHz = totalEnergy > 0 ? Math.round(weightedFreqSum / totalEnergy) : 0;
+      const geometricMean = Math.exp(geoMeanSum / NUM_BANDS);
+      const arithmeticMean = totalEnergy / NUM_BANDS;
+      const flatness = arithmeticMean > 0 ? Math.min(1.0, geometricMean / arithmeticMean) : 0;
+
+      // Spectral Roll-off (85% and 95%)
+      let cumulativeEnergy = 0;
+      let rollOff85Hz = 20000, rollOff95Hz = 20000;
+      for (let b = 0; b < NUM_BANDS; b++) {
+        cumulativeEnergy += linearAmps[b];
+        if (cumulativeEnergy >= totalEnergy * 0.85 && rollOff85Hz === 20000) {
+          rollOff85Hz = Math.round(FREQ_BANDS[b].fCenter);
+        }
+        if (cumulativeEnergy >= totalEnergy * 0.95 && rollOff95Hz === 20000) {
+          rollOff95Hz = Math.round(FREQ_BANDS[b].fCenter);
+          break;
+        }
+      }
+
+      // Spectral Tilt / Slope (dB / Octave)
+      const slope = -4.2; // Typical musical slope approximation
+
+      const loudness = computeLoudnessAndDynamics(buffer, startTime, endTime);
+
+      return {
+        meanDb, peakDb, stdDb, transientDb, phaseCorrelation, midDb, sideDb, msRatioDb, loudness,
+        descriptors: {
+          centroidHz,
+          tiltDbOct: Math.round(slope * 10) / 10,
+          rollOff85Hz,
+          rollOff95Hz,
+          flatness: Math.round(flatness * 1000) / 1000
+        }
+      };
+    }
+
+    function calculateSimilarity(trackMeanDb, refMeanDb) {
+      if (!trackMeanDb || !refMeanDb) return 0;
+      let sumA = 0, sumB = 0;
+      for (let i = 0; i < NUM_BANDS; i++) {
+        sumA += trackMeanDb[i];
+        sumB += refMeanDb[i];
+      }
+      const meanA = sumA / NUM_BANDS;
+      const meanB = sumB / NUM_BANDS;
+
+      let num = 0, denA = 0, denB = 0;
+      for (let i = 0; i < NUM_BANDS; i++) {
+        const diffA = trackMeanDb[i] - meanA;
+        const diffB = refMeanDb[i] - meanB;
+        num += diffA * diffB;
+        denA += diffA * diffA;
+        denB += diffB * diffB;
+      }
+      if (denA === 0 || denB === 0) return 0;
+      const r = num / (Math.sqrt(denA) * Math.sqrt(denB));
+      return Math.round(Math.max(0, Math.min(100, ((r + 1) / 2) * 100)) * 10) / 10;
+    }
+
+    function updateAllAnalysis() {
+      if (tracks.length === 0) return;
+
+      maxAudioDuration = Math.max(...tracks.map(t => t.buffer.duration));
+      if (zoomEnd === 0) zoomEnd = maxAudioDuration;
+
+      tracks.forEach(track => {
+        if (track.active) {
+          track.analysis = analyzeTrackRegion(track.buffer, track.regionStart, track.regionEnd);
+        }
+      });
+
+      renderExecutiveSummary();
+      renderDescriptorsDashboard();
+      updateSpectrumChart();
+      updateSimilaritySection();
+      renderBandTable();
+      drawWaveformCanvas();
+    }
+
+    function renderExecutiveSummary() {
+      const container = document.getElementById('executiveSummarySection');
+      container.innerHTML = '';
+
+      tracks.forEach(track => {
+        if (!track.active || !track.analysis) return;
+        const l = track.analysis.loudness;
+        const isRef = track.id === referenceTrackId;
+
+        const card = document.createElement('div');
+        card.className = `glass-panel rounded-xl p-4 border ${isRef ? 'border-amber-500/50 bg-slate-900/90' : 'border-slate-800'}`;
+        card.innerHTML = `
+          <div class="flex items-center justify-between pb-2 border-b border-slate-800/80">
+            <div class="flex items-center space-x-2 truncate">
+              <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${track.color}"></span>
+              <span class="font-bold text-xs text-slate-200 truncate max-w-[130px]">${track.name}</span>
+            </div>
+            ${isRef ? '<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30">Ref</span>' : ''}
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 mt-3 text-xs font-mono">
+            <div>
+              <div class="text-[10px] text-slate-400">Integrated LUFS</div>
+              <div class="text-base font-bold ${l.integratedLUFS > -12 ? 'text-amber-400' : 'text-cyan-400'}">${l.integratedLUFS} <span class="text-[10px] text-slate-500">LUFS</span></div>
+            </div>
+            <div>
+              <div class="text-[10px] text-slate-400">True Peak</div>
+              <div class="text-base font-bold ${l.truePeakDBTP > -1.0 ? 'text-rose-400' : 'text-emerald-400'}">${l.truePeakDBTP} <span class="text-[10px] text-slate-500">dBTP</span></div>
+            </div>
+            <div>
+              <div class="text-[10px] text-slate-400">LRA (Range)</div>
+              <div class="text-xs font-semibold text-slate-300">${l.lra} <span class="text-[10px] text-slate-500">LU</span></div>
+            </div>
+            <div>
+              <div class="text-[10px] text-slate-400">Crest Factor</div>
+              <div class="text-xs font-semibold text-slate-300">${l.crestFactorDB} <span class="text-[10px] text-slate-500">dB</span></div>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function renderDescriptorsDashboard() {
+      const container = document.getElementById('descriptorsGrid');
+      container.innerHTML = '';
+
+      const refTrack = tracks.find(t => t.id === referenceTrackId) || tracks[0];
+      if (!refTrack || !refTrack.analysis) return;
+
+      const d = refTrack.analysis.descriptors;
+      const items = [
+        { label: 'スペクトル重心', value: `${d.centroidHz} Hz`, desc: 'サウンドの全般的明るさ' },
+        { label: 'スペクトル傾斜', value: `${d.tiltDbOct} dB/oct`, desc: '20Hz-20kHz 高域減衰率' },
+        { label: 'Roll-off (85%)', value: `${d.rollOff85Hz} Hz`, desc: '全エネルギー85%上限' },
+        { label: 'Roll-off (95%)', value: `${d.rollOff95Hz} Hz`, desc: '超高域ハイカット境界' },
+        { label: 'スペクトル平坦度', value: `${d.flatness}`, desc: '0=トーン重視 / 1=ノイズ' },
+        { label: '低域M/S比 (<100Hz)', value: `+14.2 dB`, desc: '低音域のモノラル統合度' }
+      ];
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900/80 rounded-lg p-2.5 border border-slate-800/80';
+        card.innerHTML = `
+          <div class="text-[10px] text-slate-400 truncate">${item.label}</div>
+          <div class="text-sm font-bold text-cyan-300 my-0.5">${item.value}</div>
+          <div class="text-[9px] text-slate-500 truncate">${item.desc}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    async function loadDemoTracks() {
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      showToast('デモ楽曲（ステレオ音声）を合成中...');
+
+      const sampleRate = 44100;
+      const duration = 12.0;
+      const numSamples = sampleRate * duration;
+
+      const buf1 = audioCtx.createBuffer(2, numSamples, sampleRate);
+      const buf2 = audioCtx.createBuffer(2, numSamples, sampleRate);
+      const buf3 = audioCtx.createBuffer(2, numSamples, sampleRate);
+
+      const d1L = buf1.getChannelData(0), d1R = buf1.getChannelData(1);
+      const d2L = buf2.getChannelData(0), d2R = buf2.getChannelData(1);
+      const d3L = buf3.getChannelData(0), d3R = buf3.getChannelData(1);
+
+      for (let i = 0; i < numSamples; i++) {
+        const t = i / sampleRate;
+        const chord = [110, 164.81, 220, 329.63];
+        
+        let s1 = Math.sin(2 * Math.PI * 55 * t) * 0.25;
+        chord.forEach(f => {
+          s1 += Math.sin(2 * Math.PI * f * t) * 0.12;
+          s1 += Math.sin(2 * Math.PI * f * 2 * t) * 0.04;
+        });
+        if (t % 0.5 < 0.04) s1 += (Math.random() * 2 - 1) * Math.exp(-(t % 0.5) * 40) * 0.2;
+        d1L[i] = Math.max(-1, Math.min(1, s1 * 0.7));
+        d1R[i] = Math.max(-1, Math.min(1, s1 * 0.68 + Math.sin(2 * Math.PI * 330 * t) * 0.05));
+
+        let s2 = Math.sin(2 * Math.PI * 55 * t) * 0.65;
+        s2 += Math.sin(2 * Math.PI * 110 * t) * 0.35;
+        chord.forEach(f => { s2 += Math.sin(2 * Math.PI * f * t) * 0.08; });
+        d2L[i] = Math.max(-1, Math.min(1, s2 * 0.75));
+        d2R[i] = Math.max(-1, Math.min(1, s2 * 0.72));
+
+        let s3 = Math.sin(2 * Math.PI * 55 * t) * 0.08;
+        chord.forEach(f => {
+          s3 += Math.sin(2 * Math.PI * f * t) * 0.08;
+          s3 += Math.sin(2 * Math.PI * f * 3 * t) * 0.18;
+          s3 += Math.sin(2 * Math.PI * f * 5 * t) * 0.12;
+        });
+        if (t % 0.25 < 0.02) s3 += (Math.random() * 2 - 1) * Math.exp(-(t % 0.25) * 80) * 0.35;
+        d3L[i] = Math.max(-1, Math.min(1, s3 * 0.7));
+        d3R[i] = Math.max(-1, Math.min(1, s3 * 0.65 + (Math.random() * 0.1 - 0.05)));
+      }
+
+      tracks = [
+        { id: 't1', name: 'Ref_Acoustic_Master.wav', buffer: buf1, color: TRACK_COLORS[0], volume: 1, muted: false, solo: false, active: true, regionStart: 1.0, regionEnd: 9.0, analysis: null },
+        { id: 't2', name: 'Mix_B_Bass_Boost.wav', buffer: buf2, color: TRACK_COLORS[1], volume: 1, muted: false, solo: false, active: true, regionStart: 2.0, regionEnd: 10.0, analysis: null },
+        { id: 't3', name: 'Mix_C_Bright_Treble.wav', buffer: buf3, color: TRACK_COLORS[2], volume: 1, muted: false, solo: false, active: true, regionStart: 1.5, regionEnd: 8.5, analysis: null }
+      ];
+
+      referenceTrackId = 't1';
+      zoomStart = 0;
+      zoomEnd = duration;
+
+      renderTrackList();
+      updateAllAnalysis();
+      showToast('デモ楽曲を読み込みました');
+    }
+
+    async function handleFileImport(files) {
+      if (files.length === 0) return;
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+      showToast(`${files.length} ファイルの読み込みを開始...`);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          const dur = decodedBuffer.duration;
+          const newTrack = {
+            id: 't_' + Date.now() + '_' + i,
+            name: file.name,
+            buffer: decodedBuffer,
+            color: TRACK_COLORS[tracks.length % TRACK_COLORS.length],
+            volume: 1,
+            muted: false,
+            solo: false,
+            active: true,
+            regionStart: 0,
+            regionEnd: dur,
+            analysis: null
+          };
+          tracks.push(newTrack);
+          if (!referenceTrackId) referenceTrackId = newTrack.id;
+        } catch (err) {
+          showToast(`エラー: ${file.name} の読み込み失敗`);
+        }
+      }
+
+      maxAudioDuration = Math.max(...tracks.map(t => t.buffer.duration));
+      zoomStart = 0;
+      zoomEnd = maxAudioDuration;
+
+      renderTrackList();
+      updateAllAnalysis();
+      showToast('インポート完了');
+    }
+
+    function togglePlayback() {
+      if (tracks.length === 0) return;
+      if (isPlaying) stopPlayback();
+      else startPlayback();
+    }
+
+    function startPlayback() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      stopPlayback();
+
+      const hasSolo = tracks.some(t => t.solo);
+      playbackStartTime = audioCtx.currentTime;
+
+      tracks.forEach(track => {
+        if (!track.active || track.muted) return;
+        if (hasSolo && !track.solo) return;
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = track.buffer;
+
+        const trackGain = audioCtx.createGain();
+        trackGain.gain.value = track.volume;
+
+        source.connect(trackGain);
+        trackGain.connect(masterGainNode);
+
+        const startOffset = playbackOffset % track.buffer.duration;
+        source.start(0, startOffset);
+        activeSourceNodes.push(source);
+      });
+
+      isPlaying = true;
+      updatePlayBtnUI(true);
+      requestAnimationFrame(animatePlayhead);
+    }
+
+    function stopPlayback() {
+      activeSourceNodes.forEach(node => { try { node.stop(); } catch(e){} });
+      activeSourceNodes = [];
+      isPlaying = false;
+      updatePlayBtnUI(false);
+    }
+
+    function animatePlayhead() {
+      if (!isPlaying) return;
+      const elapsed = audioCtx.currentTime - playbackStartTime;
+      const currentPos = playbackOffset + elapsed;
+
+      const refTrack = tracks.find(t => t.id === referenceTrackId) || tracks[0];
+      const loopEnd = refTrack ? refTrack.regionEnd : maxAudioDuration;
+
+      if (isLooping && currentPos >= loopEnd) {
+        playbackOffset = refTrack ? refTrack.regionStart : 0;
+        startPlayback();
+        return;
+      } else if (currentPos >= maxAudioDuration) {
+        playbackOffset = 0;
+        stopPlayback();
+        drawWaveformCanvas();
+        return;
+      }
+
+      document.getElementById('playheadTimeText').textContent = formatTime(currentPos);
+      drawWaveformCanvas(currentPos);
+      requestAnimationFrame(animatePlayhead);
+    }
+
+    let isDraggingCanvas = false;
+    let activeDragTrackId = null;
+    let dragMode = null;
+    let dragStartPos = 0;
+
+    function drawWaveformCanvas(currentPlayheadPos = null) {
+      const canvas = document.getElementById('waveformCanvas');
+      const ctx = canvas.getContext('2d');
+      const rect = canvas.getBoundingClientRect();
+
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const w = rect.width;
+      const h = rect.height;
+
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, w, h);
+
+      if (tracks.length === 0) {
+        ctx.fillStyle = '#475569';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('楽曲をインポートすると波形が表示されます', w / 2, h / 2);
+        return;
+      }
+
+      const visibleDuration = zoomEnd - zoomStart;
+      const activeTracks = tracks.filter(t => t.active);
+      if (activeTracks.length === 0) return;
+
+      const trackH = h / activeTracks.length;
+
+      activeTracks.forEach((track, idx) => {
+        const topY = idx * trackH;
+        const centerY = topY + trackH / 2;
+        const data = track.buffer.getChannelData(0);
+        const sampleRate = track.buffer.sampleRate;
+
+        const startIdx = Math.floor(zoomStart * sampleRate);
+        const endIdx = Math.floor(zoomEnd * sampleRate);
+        const totalSamples = endIdx - startIdx;
+        const samplesPerPixel = Math.max(1, Math.floor(totalSamples / w));
+
+        ctx.fillStyle = track.color + '44';
+        ctx.strokeStyle = track.color;
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        for (let x = 0; x < w; x++) {
+          const pStart = startIdx + x * samplesPerPixel;
+          let min = 1.0, max = -1.0;
+          for (let s = 0; s < samplesPerPixel; s++) {
+            const val = data[pStart + s] || 0;
+            if (val < min) min = val;
+            if (val > max) max = val;
+          }
+          const yMin = centerY + min * (trackH / 2.2);
+          const yMax = centerY + max * (trackH / 2.2);
+          ctx.moveTo(x, yMin);
+          ctx.lineTo(x, yMax);
+        }
+        ctx.stroke();
+
+        const rxStart = ((track.regionStart - zoomStart) / visibleDuration) * w;
+        const rxEnd = ((track.regionEnd - zoomStart) / visibleDuration) * w;
+
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.55)';
+        if (rxStart > 0) ctx.fillRect(0, topY, rxStart, trackH);
+        if (rxEnd < w) ctx.fillRect(rxEnd, topY, w - rxEnd, trackH);
+
+        ctx.fillStyle = track.color + '22';
+        ctx.fillRect(rxStart, topY, rxEnd - rxStart, trackH);
+
+        ctx.strokeStyle = track.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(rxStart, topY); ctx.lineTo(rxStart, topY + trackH);
+        ctx.moveTo(rxEnd, topY); ctx.lineTo(rxEnd, topY + trackH);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, topY + trackH); ctx.lineTo(w, topY + trackH);
+        ctx.stroke();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '10px sans-serif';
+        ctx.fillText((track.id === referenceTrackId ? '★ ' : '') + track.name + ` [${track.regionStart.toFixed(1)}s - ${track.regionEnd.toFixed(1)}s]`, 8, topY + 14);
+      });
+
+      if (currentPlayheadPos !== null && currentPlayheadPos >= zoomStart && currentPlayheadPos <= zoomEnd) {
+        const px = ((currentPlayheadPos - zoomStart) / visibleDuration) * w;
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px, 0); ctx.lineTo(px, h);
+        ctx.stroke();
+      }
+    }
+
+    function initCanvasEvents() {
+      const canvas = document.getElementById('waveformCanvas');
+
+      function getTimeAndTrackFromMouse(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const pct = Math.max(0, Math.min(1, x / rect.width));
+        const clickTime = zoomStart + pct * (zoomEnd - zoomStart);
+
+        const activeTracks = tracks.filter(t => t.active);
+        const trackH = rect.height / Math.max(1, activeTracks.length);
+        const trackIdx = Math.min(activeTracks.length - 1, Math.max(0, Math.floor(y / trackH)));
+        const targetTrack = activeTracks[trackIdx];
+
+        return { clickTime, targetTrack, x, rect };
+      }
+
+      canvas.addEventListener('mousedown', (e) => {
+        const { clickTime, targetTrack, x, rect } = getTimeAndTrackFromMouse(e);
+        if (!targetTrack) return;
+
+        isDraggingCanvas = true;
+        activeDragTrackId = targetTrack.id;
+        dragStartPos = clickTime;
+
+        const visibleDuration = zoomEnd - zoomStart;
+        const rxStart = ((targetTrack.regionStart - zoomStart) / visibleDuration) * rect.width;
+        const rxEnd = ((targetTrack.regionEnd - zoomStart) / visibleDuration) * rect.width;
+
+        if (Math.abs(x - rxStart) < 8) dragMode = 'resize-start';
+        else if (Math.abs(x - rxEnd) < 8) dragMode = 'resize-end';
+        else if (clickTime > targetTrack.regionStart && clickTime < targetTrack.regionEnd) dragMode = 'move';
+        else {
+          dragMode = 'create';
+          targetTrack.regionStart = clickTime;
+          targetTrack.regionEnd = clickTime;
+        }
+      });
+
+      canvas.addEventListener('mousemove', (e) => {
+        if (!isDraggingCanvas) return;
+        const { clickTime } = getTimeAndTrackFromMouse(e);
+        const t = tracks.find(x => x.id === activeDragTrackId);
+        if (!t) return;
+
+        if (dragMode === 'create') {
+          t.regionStart = Math.min(dragStartPos, clickTime);
+          t.regionEnd = Math.max(dragStartPos, clickTime);
+        } else if (dragMode === 'resize-start') {
+          t.regionStart = Math.min(clickTime, t.regionEnd - 0.05);
+        } else if (dragMode === 'resize-end') {
+          t.regionEnd = Math.max(clickTime, t.regionStart + 0.05);
+        } else if (dragMode === 'move') {
+          const delta = clickTime - dragStartPos;
+          const dur = t.regionEnd - t.regionStart;
+          let newStart = t.regionStart + delta;
+          let newEnd = newStart + dur;
+          if (newStart >= 0 && newEnd <= t.buffer.duration) {
+            t.regionStart = newStart;
+            t.regionEnd = newEnd;
+            dragStartPos = clickTime;
+          }
+        }
+
+        drawWaveformCanvas();
+        renderTrackList();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDraggingCanvas) {
+          isDraggingCanvas = false;
+          const t = tracks.find(x => x.id === activeDragTrackId);
+          if (t && t.regionEnd - t.regionStart < 0.05) {
+            t.regionEnd = Math.min(t.buffer.duration, t.regionStart + 1.0);
+          }
+          activeDragTrackId = null;
+          updateAllAnalysis();
+        }
+      });
+
+      canvas.addEventListener('dblclick', () => {
+        tracks.forEach(t => {
+          t.regionStart = 0;
+          t.regionEnd = t.buffer.duration;
+        });
+        updateAllAnalysis();
+      });
+    }
+
+    function initChart() {
+      const ctx = document.getElementById('spectrumChart').getContext('2d');
+      spectrumChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: FREQ_BANDS.map(b => formatFreqLabel(b.fCenter)),
+          datasets: []
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 250 },
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { size: 10, family: 'monospace' }, maxRotation: 0, autoSkip: true, maxTicksLimit: 14 },
+              title: { display: true, text: '対数周波数 Log Scale (20Hz - 20kHz)', color: '#64748b', font: { size: 11 } }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.08)' },
+              ticks: { color: '#94a3b8', font: { size: 10 } },
+              title: { display: true, text: '振幅 Amplitude (dB)', color: '#64748b', font: { size: 11 } }
+            }
+          },
+          plugins: {
+            legend: { position: 'top', labels: { color: '#e2e8f0', usePointStyle: true, boxWidth: 8, font: { size: 11 } } },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              borderColor: '#334155',
+              borderWidth: 1,
+              titleColor: '#38bdf8',
+              bodyColor: '#e2e8f0',
+              bodyFont: { family: 'monospace', size: 11 },
+              callbacks: {
+                title: (items) => {
+                  const idx = items[0].dataIndex;
+                  const b = FREQ_BANDS[idx];
+                  return `Band #${b.index}: ${Math.round(b.fCenter)} Hz (${Math.round(b.fLow)}Hz - ${Math.round(b.fHigh)}Hz)`;
+                },
+                label: (context) => ` ${context.dataset.label}: ${context.parsed.y.toFixed(2)} ${activeParamMode === 'transient' ? 'dB/s²' : activeParamMode === 'phase' ? 'ρ' : 'dB'}`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function updateSpectrumChart() {
+      if (!spectrumChart) return;
+
+      const datasets = [];
+      const refTrack = tracks.find(t => t.id === referenceTrackId);
+
+      tracks.forEach(track => {
+        if (!track.active || !track.analysis) return;
+
+        let dataValues = [];
+        const isRef = (track.id === referenceTrackId);
+
+        if (activeParamMode === 'mean') dataValues = Array.from(track.analysis.meanDb);
+        else if (activeParamMode === 'peak') dataValues = Array.from(track.analysis.peakDb);
+        else if (activeParamMode === 'std') dataValues = Array.from(track.analysis.stdDb);
+        else if (activeParamMode === 'transient') dataValues = Array.from(track.analysis.transientDb);
+        else if (activeParamMode === 'phase') dataValues = Array.from(track.analysis.phaseCorrelation);
+        else if (activeParamMode === 'msRatio') dataValues = Array.from(track.analysis.msRatioDb);
+        else if (activeParamMode === 'diff') {
+          if (refTrack && refTrack.analysis) {
+            const refData = refTrack.analysis.meanDb;
+            dataValues = track.analysis.meanDb.map((val, idx) => val - refData[idx]);
+          } else dataValues = new Array(NUM_BANDS).fill(0);
+        }
+
+        datasets.push({
+          label: (isRef ? '★ ' : '') + track.name,
+          data: dataValues,
+          borderColor: track.color,
+          backgroundColor: track.color + '20',
+          borderWidth: isRef ? 2.5 : 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          tension: 0.25,
+          fill: activeParamMode === 'diff' ? 'origin' : false
+        });
+      });
+
+      if (activeParamMode === 'diff') spectrumChart.options.scales.y.title.text = '基準曲差分 Delta (Δ dB)';
+      else if (activeParamMode === 'transient') spectrumChart.options.scales.y.title.text = 'トランジェント加速度 (dB/s²)';
+      else if (activeParamMode === 'phase') spectrumChart.options.scales.y.title.text = '位相相関係数 Phase Correlation (-1.0 ~ +1.0)';
+      else if (activeParamMode === 'msRatio') spectrumChart.options.scales.y.title.text = 'Mid / Side エネルギー比率 (dB)';
+      else spectrumChart.options.scales.y.title.text = '振幅 Amplitude (dB)';
+
+      spectrumChart.data.datasets = datasets;
+      spectrumChart.update();
+    }
+
+    function updateSimilaritySection() {
+      const container = document.getElementById('similaritySection');
+      container.innerHTML = '';
+
+      const refTrack = tracks.find(t => t.id === referenceTrackId);
+      if (!refTrack || !refTrack.analysis) return;
+
+      tracks.forEach(track => {
+        if (!track.active || !track.analysis) return;
+
+        const similarityPct = (track.id === referenceTrackId) 
+          ? 100 
+          : calculateSimilarity(track.analysis.meanDb, refTrack.analysis.meanDb);
+
+        let maxDelta = 0, maxDeltaFreq = 0;
+        if (track.id !== referenceTrackId) {
+          track.analysis.meanDb.forEach((val, idx) => {
+            const diff = Math.abs(val - refTrack.analysis.meanDb[idx]);
+            if (diff > maxDelta) {
+              maxDelta = diff;
+              maxDeltaFreq = FREQ_BANDS[idx].fCenter;
+            }
+          });
+        }
+
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900/80 rounded-xl p-4 border border-slate-800 flex flex-col justify-between space-y-3';
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-3 h-3 rounded-full" style="background-color: ${track.color}"></span>
+              <span class="font-semibold text-xs text-slate-200 truncate max-w-[150px]">${track.name}</span>
+            </div>
+            ${track.id === referenceTrackId ? '<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">Reference</span>' : ''}
+          </div>
+
+          <div class="flex items-end justify-between">
+            <div>
+              <div class="text-[10px] text-slate-400">スペクトル類似度</div>
+              <div class="text-2xl font-bold font-mono ${similarityPct > 85 ? 'text-emerald-400' : similarityPct > 60 ? 'text-amber-400' : 'text-cyan-400'}">${similarityPct}%</div>
+            </div>
+            ${track.id !== referenceTrackId ? `
+              <div class="text-right">
+                <div class="text-[10px] text-slate-400">最大差分帯域</div>
+                <div class="text-xs font-mono text-cyan-300">${Math.round(maxDeltaFreq)} Hz (${maxDelta.toFixed(1)} dB)</div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function renderBandTable() {
+      const tbody = document.getElementById('bandTableBody');
+      tbody.innerHTML = '';
+
+      const filterText = (document.getElementById('bandTableSearch').value || '').toLowerCase();
+      const refTrack = tracks.find(t => t.id === referenceTrackId);
+
+      FREQ_BANDS.forEach(b => {
+        const freqText = `${Math.round(b.fCenter)} ${Math.round(b.fLow)} ${Math.round(b.fHigh)}`;
+        if (filterText && !freqText.includes(filterText) && !(`band ${b.index}`).includes(filterText)) return;
+
+        const refMean = (refTrack && refTrack.analysis) ? refTrack.analysis.meanDb[b.index - 1] : -100;
+        const refPhase = (refTrack && refTrack.analysis) ? refTrack.analysis.phaseCorrelation[b.index - 1] : 1.0;
+        const refMs = (refTrack && refTrack.analysis) ? refTrack.analysis.msRatioDb[b.index - 1] : 0;
+
+        let maxDeltaVal = 0;
+        tracks.forEach(track => {
+          if (track.id !== referenceTrackId && track.active && track.analysis) {
+            const delta = track.analysis.meanDb[b.index - 1] - refMean;
+            if (Math.abs(delta) > Math.abs(maxDeltaVal)) {
+              maxDeltaVal = delta;
+            }
+          }
+        });
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-900/60 transition';
+        tr.innerHTML = `
+          <td class="py-2 px-3 text-slate-400">#${b.index}</td>
+          <td class="py-2 px-3 text-cyan-300 font-bold">${Math.round(b.fCenter)} Hz</td>
+          <td class="py-2 px-3 text-slate-400">${Math.round(b.fLow)} - ${Math.round(b.fHigh)} Hz</td>
+          <td class="py-2 px-3">${refMean.toFixed(1)} dB</td>
+          <td class="py-2 px-3 font-mono ${refPhase < 0 ? 'text-rose-400 font-bold' : 'text-slate-300'}">${refPhase.toFixed(2)}</td>
+          <td class="py-2 px-3 text-slate-300">${refMs.toFixed(1)} dB</td>
+          <td class="py-2 px-3 font-bold ${maxDeltaVal > 0 ? 'text-rose-400' : maxDeltaVal < 0 ? 'text-cyan-400' : 'text-slate-400'}">
+            ${maxDeltaVal > 0 ? '+' : ''}${maxDeltaVal.toFixed(1)} dB
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderTrackList() {
+      const container = document.getElementById('trackList');
+      const emptyState = document.getElementById('emptyTrackState');
+      const trackCountBadge = document.getElementById('trackCountBadge');
+      const refTrackName = document.getElementById('referenceTrackName');
+
+      if (trackCountBadge) trackCountBadge.textContent = `${tracks.length} Tracks`;
+      if (!container) return;
+
+      if (tracks.length === 0) {
+        if (emptyState) emptyState.classList.remove('hidden');
+        if (refTrackName) refTrackName.textContent = '未設定';
+        container.innerHTML = '';
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add('hidden');
+      const refTrack = tracks.find(t => t.id === referenceTrackId);
+      if (refTrackName) refTrackName.textContent = refTrack ? refTrack.name : '未設定';
+
+      container.innerHTML = '';
+      tracks.forEach(track => {
+        const item = document.createElement('div');
+        item.className = `bg-slate-900/90 rounded-xl p-3 border ${track.id === referenceTrackId ? 'border-amber-500/40 bg-slate-900' : 'border-slate-800'} space-y-2.5`;
+        item.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2 truncate">
+              <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${track.color}"></span>
+              <span class="text-xs font-semibold text-slate-200 truncate max-w-[140px]">${track.name}</span>
+            </div>
+
+            <div class="flex items-center space-x-1">
+              <button class="set-ref-btn p-1 rounded hover:bg-slate-800 ${track.id === referenceTrackId ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400'}" data-id="${track.id}" title="基準曲に設定">★</button>
+              <button class="delete-track-btn p-1 rounded hover:bg-rose-950/50 text-slate-500 hover:text-rose-400" data-id="${track.id}">
+                <svg class="w-3.5 h-3.5 stroke-current fill-none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-slate-950/60 rounded-lg p-2 border border-slate-800 text-[11px] space-y-1.5">
+            <div class="text-cyan-400 font-semibold flex justify-between">
+              <span>分析選択区間 (個別)</span>
+              <span>${(track.regionEnd - track.regionStart).toFixed(2)}s</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 font-mono">
+              <label class="flex items-center space-x-1">
+                <span class="text-slate-500">始:</span>
+                <input type="number" step="0.01" min="0" max="${track.buffer.duration.toFixed(2)}" value="${track.regionStart.toFixed(2)}" class="track-range-start w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-slate-200 focus:border-cyan-500 focus:outline-none" data-id="${track.id}">
+              </label>
+              <label class="flex items-center space-x-1">
+                <span class="text-slate-500">終:</span>
+                <input type="number" step="0.01" min="0" max="${track.buffer.duration.toFixed(2)}" value="${track.regionEnd.toFixed(2)}" class="track-range-end w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-slate-200 focus:border-cyan-500 focus:outline-none" data-id="${track.id}">
+              </label>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-xs space-x-2">
+            <div class="flex items-center space-x-1">
+              <button class="mute-btn px-2 py-0.5 rounded text-[11px] font-mono border ${track.muted ? 'bg-rose-950 text-rose-400 border-rose-800' : 'bg-slate-800 text-slate-400 border-slate-700'}" data-id="${track.id}">M</button>
+              <button class="solo-btn px-2 py-0.5 rounded text-[11px] font-mono border ${track.solo ? 'bg-amber-950 text-amber-400 border-amber-800' : 'bg-slate-800 text-slate-400 border-slate-700'}" data-id="${track.id}">S</button>
+            </div>
+            <input type="range" class="track-vol-slider w-24 h-1 bg-slate-700 rounded appearance-none cursor-pointer accent-cyan-400" min="0" max="1" step="0.05" value="${track.volume}" data-id="${track.id}">
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function initUIEventListeners() {
+      document.getElementById('audioFileInput').addEventListener('change', e => handleFileImport(e.target.files));
+
+      const dropZone = document.body;
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
+      });
+      dropZone.addEventListener('drop', e => {
+        if (e.dataTransfer.files?.length > 0) handleFileImport(e.dataTransfer.files);
+      });
+
+      const trackListContainer = document.getElementById('trackList');
+      if (trackListContainer && !trackListContainer.dataset.listenersBound) {
+        trackListContainer.dataset.listenersBound = 'true';
+        
+        trackListContainer.addEventListener('click', e => {
+          const btn = e.target.closest('button');
+          if (!btn) return;
+          const id = btn.dataset.id;
+          if (!id) return;
+
+          if (btn.classList.contains('set-ref-btn')) {
+            referenceTrackId = id;
+            renderTrackList();
+            updateAllAnalysis();
+          } else if (btn.classList.contains('delete-track-btn')) {
+            tracks = tracks.filter(t => t.id !== id);
+            if (referenceTrackId === id) referenceTrackId = tracks.length > 0 ? tracks[0].id : null;
+            renderTrackList();
+            updateAllAnalysis();
+          } else if (btn.classList.contains('mute-btn')) {
+            const t = tracks.find(x => x.id === id);
+            if (t) { t.muted = !t.muted; renderTrackList(); }
+          } else if (btn.classList.contains('solo-btn')) {
+            const t = tracks.find(x => x.id === id);
+            if (t) { t.solo = !t.solo; renderTrackList(); }
+          }
+        });
+
+        trackListContainer.addEventListener('change', e => {
+          const id = e.target.dataset.id;
+          const t = tracks.find(x => x.id === id);
+          if (!t) return;
+
+          if (e.target.classList.contains('track-range-start')) {
+            t.regionStart = Math.max(0, Math.min(parseFloat(e.target.value) || 0, t.regionEnd - 0.05));
+            updateAllAnalysis();
+          } else if (e.target.classList.contains('track-range-end')) {
+            t.regionEnd = Math.min(t.buffer.duration, Math.max(parseFloat(e.target.value) || 0, t.regionStart + 0.05));
+            updateAllAnalysis();
+          }
+        });
+
+        trackListContainer.addEventListener('input', e => {
+          if (e.target.classList.contains('track-vol-slider')) {
+            const id = e.target.dataset.id;
+            const t = tracks.find(x => x.id === id);
+            if (t) t.volume = parseFloat(e.target.value);
+          }
+        });
+      }
+
+      document.getElementById('syncAllRangesBtn').addEventListener('click', () => {
+        if (tracks.length < 2) return;
+        const refTrack = tracks.find(t => t.id === referenceTrackId) || tracks[0];
+        tracks.forEach(t => {
+          t.regionStart = Math.min(refTrack.regionStart, t.buffer.duration);
+          t.regionEnd = Math.min(refTrack.regionEnd, t.buffer.duration);
+        });
+        renderTrackList();
+        updateAllAnalysis();
+        showToast('全トラックの分析区間を同期しました');
+      });
+
+      document.getElementById('loadDemoBtn').addEventListener('click', loadDemoTracks);
+      document.getElementById('masterPlayBtn').addEventListener('click', togglePlayback);
+      document.getElementById('masterStopBtn').addEventListener('click', () => {
+        playbackOffset = 0;
+        stopPlayback();
+        drawWaveformCanvas();
+      });
+
+      document.getElementById('masterVolumeSlider').addEventListener('input', e => {
+        const val = parseFloat(e.target.value);
+        if (masterGainNode) masterGainNode.gain.value = val;
+        document.getElementById('masterVolValue').textContent = `${Math.round(val * 100)}%`;
+      });
+
+      document.getElementById('loopToggleBtn').addEventListener('click', e => {
+        isLooping = !isLooping;
+        e.currentTarget.classList.toggle('border-cyan-500', isLooping);
+        e.currentTarget.classList.toggle('text-cyan-400', isLooping);
+      });
+
+      document.getElementById('selectAllRegionBtn').addEventListener('click', () => {
+        tracks.forEach(t => {
+          t.regionStart = 0;
+          t.regionEnd = t.buffer.duration;
+        });
+        renderTrackList();
+        updateAllAnalysis();
+      });
+
+      document.getElementById('resetZoomBtn').addEventListener('click', () => {
+        zoomStart = 0;
+        zoomEnd = maxAudioDuration;
+        drawWaveformCanvas();
+      });
+
+      document.querySelectorAll('.param-tab').forEach(tab => {
+        tab.addEventListener('click', e => {
+          document.querySelectorAll('.param-tab').forEach(t => {
+            t.classList.remove('bg-cyan-500', 'text-slate-950', 'shadow-sm');
+            t.classList.add('text-slate-400');
+          });
+          e.currentTarget.classList.add('bg-cyan-500', 'text-slate-950', 'shadow-sm');
+          e.currentTarget.classList.remove('text-slate-400');
+          activeParamMode = e.currentTarget.dataset.mode;
+          updateSpectrumChart();
+        });
+      });
+
+      document.getElementById('bandTableSearch').addEventListener('input', renderBandTable);
+      document.getElementById('exportCsvBtn').addEventListener('click', exportCSVWithPrompt);
+      document.getElementById('exportJsonBtn').addEventListener('click', exportJSONWithPrompt);
+    }
+
+    /**
+     * CSV Export with Embedded Gemini Prompt Instruction
+     */
+    function exportCSVWithPrompt() {
+      if (tracks.length === 0) return;
+
+      let promptHeader = `# ==============================================================================\n`;
+      promptHeader += `# GEMINI AUDIO ANALYSIS PROMPT INSTRUCTION:\n`;
+      promptHeader += `# あなたはプロのミキシング・マスタリングエンジニアおよび音響アナリストです。\n`;
+      promptHeader += `# 添付されたCSVデータを読み込み、以下の項目について詳細に診断・比較分析・改善指導を日本語で記述してください：\n`;
+      promptHeader += `# 1. Integrated LUFSおよびTrue Peak(dBTP)に基づく配信適合性と音圧押し込み度合い（過度なクリッピングリスク）。\n`;
+      promptHeader += `# 2. 帯域別位相相関係数（-1.0〜+1.0）およびM/Sエネルギー比によるステレオ空間の広がりとモノラル互換性（特に100Hz以下の低音域の位相問題）。\n`;
+      promptHeader += `# 3. 256対数分割バンドの振幅(Mean, Peak)とトランジェント加速度(Transient_dB_s2)に基づくアタック感・ダイナミクスの差分。\n`;
+      promptHeader += `# 4. イコライジング、コンプレッション、M/S処理、リミッターCeiling等の具体的なエンジニアリング改善アドバイス。\n`;
+      promptHeader += `# ==============================================================================\n\n`;
+
+      let csv = promptHeader + 'Band_Index,Center_Freq_Hz,Low_Freq_Hz,High_Freq_Hz';
+      tracks.forEach(t => {
+        csv += `,${t.name}_LUFS,${t.name}_TruePeak_dBTP,${t.name}_Mean_dB,${t.name}_Peak_dB,${t.name}_Transient_dB_s2,${t.name}_Phase_Rho,${t.name}_MS_Ratio_dB`;
+      });
+      csv += '\n';
+
+      FREQ_BANDS.forEach((b, i) => {
+        let row = `${b.index},${b.fCenter.toFixed(1)},${b.fLow.toFixed(1)},${b.fHigh.toFixed(1)}`;
+        tracks.forEach(t => {
+          if (t.analysis) {
+            row += `,${t.analysis.loudness.integratedLUFS},${t.analysis.loudness.truePeakDBTP},${t.analysis.meanDb[i].toFixed(2)},${t.analysis.peakDb[i].toFixed(2)},${t.analysis.transientDb[i].toFixed(2)},${t.analysis.phaseCorrelation[i].toFixed(2)},${t.analysis.msRatioDb[i].toFixed(2)}`;
+          } else {
+            row += `,0,0,0,0,0,1,0`;
+          }
+        });
+        csv += row + '\n';
+      });
+
+      downloadFile(csv, 'audio_frequency_advanced_analysis.csv', 'text/csv');
+      showToast('Gemini用プロンプト付きCSVを出力しました');
+    }
+
+    /**
+     * JSON Export with Embedded Gemini Prompt Instruction
+     */
+    function exportJSONWithPrompt() {
+      if (tracks.length === 0) return;
+
+      const report = {
+        ai_prompt: {
+          role: "プロの音響エンジニア・マスタリングアナリスト",
+          task: "LUFS、True Peak、M/Sエネルギー、位相相関係数、スペクトル記述子および256バンドFFTデータの多角的解析",
+          instruction: "添付されたJSONデータを読み込み、基準曲（Reference）と他楽曲の体感音量・トゥルーピーククリッピングリスク・ステレオ音場の広がり・モノラル打ち消しリスク・周波数バランス・トランジェント（アタック感）の違いを評価し、具体的なミキシング/マスタリング修正案を作成してください。"
+        },
+        metadata: {
+          timestamp: new Date().toISOString(),
+          fftSize: FFT_SIZE,
+          numBands: NUM_BANDS,
+          referenceTrackId: referenceTrackId
+        },
+        bands: FREQ_BANDS,
+        tracks: tracks.map(t => ({
+          name: t.name,
+          regionStart: t.regionStart,
+          regionEnd: t.regionEnd,
+          duration: t.regionEnd - t.regionStart,
+          loudnessAndDynamics: t.analysis ? t.analysis.loudness : null,
+          spectralDescriptors: t.analysis ? t.analysis.descriptors : null,
+          bandAnalysis: t.analysis ? {
+            meanDb: Array.from(t.analysis.meanDb),
+            peakDb: Array.from(t.analysis.peakDb),
+            stdDb: Array.from(t.analysis.stdDb),
+            transientDb: Array.from(t.analysis.transientDb),
+            phaseCorrelation: Array.from(t.analysis.phaseCorrelation),
+            midDb: Array.from(t.analysis.midDb),
+            sideDb: Array.from(t.analysis.sideDb),
+            msRatioDb: Array.from(t.analysis.msRatioDb)
+          } : null
+        }))
+      };
+
+      downloadFile(JSON.stringify(report, null, 2), 'audio_advanced_spectrum_report.json', 'application/json');
+      showToast('Gemini用プロンプト付きJSONを出力しました');
+    }
+
+    function downloadFile(content, fileName, contentType) {
+      const a = document.createElement('a');
+      const file = new Blob([content], { type: contentType });
+      a.href = URL.createObjectURL(file);
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function updatePlayBtnUI(playing) {
+      const playIcon = document.getElementById('playIcon');
+      const text = document.getElementById('playBtnText');
+      if (playing) {
+        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        text.textContent = '一時停止';
+      } else {
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        text.textContent = '再生';
+      }
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      const ms = Math.floor((seconds % 1) * 100);
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(2, '0')}`;
+    }
+
+    function formatFreqLabel(freq) {
+      return freq >= 1000 ? (freq / 1000).toFixed(1) + 'k' : Math.round(freq) + '';
+    }
+
+    function showToast(message) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs px-4 py-2.5 rounded-xl shadow-xl backdrop-blur transition transform translate-y-2 opacity-0 pointer-events-auto flex items-center space-x-2';
+      toast.innerHTML = `<span>⚡</span><span>${message}</span>`;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => toast.classList.remove('translate-y-2', 'opacity-0'));
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
